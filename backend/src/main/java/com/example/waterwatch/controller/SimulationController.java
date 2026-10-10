@@ -17,7 +17,6 @@ import java.util.concurrent.ThreadLocalRandom;
 
 @RestController
 @RequestMapping("/api/readings")
-@CrossOrigin(origins = "http://localhost:5173")
 public class SimulationController {
 
     private final DeviceRepository deviceRepository;

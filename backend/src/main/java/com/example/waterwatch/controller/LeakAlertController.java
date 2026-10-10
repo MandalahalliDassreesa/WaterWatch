@@ -14,7 +14,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/alerts")
-@CrossOrigin(origins = "http://localhost:5173")
 public class LeakAlertController {
 
     private final LeakDetectionService leakDetectionService;

@@ -8,7 +8,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/usage")
-@CrossOrigin(origins = "http://localhost:5173")
 public class UsageController {
 
     private final UsageService usageService;
