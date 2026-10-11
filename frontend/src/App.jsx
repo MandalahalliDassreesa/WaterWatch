@@ -15,6 +15,7 @@ import {
   X,
   Database,
   Gauge,
+  ShieldCheck,
 } from "lucide-react";
 import {
   Area,
@@ -91,6 +92,10 @@ function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [user, setUser] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminUsers, setAdminUsers] = useState([]);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminError, setAdminError] = useState("");
 
   const handleGoogleLogin = () => {
     window.location.href = `${BACKEND_URL}/oauth2/authorization/google`;
@@ -161,6 +166,49 @@ function App() {
     };
   }, []);
 
+  const loadAdminUsers = useCallback(async () => {
+    setAdminLoading(true);
+    setAdminError("");
+
+    try {
+      const response = await fetch(`${API_URL}/admin/users`, {
+        method: "GET",
+        credentials: "include",
+      });
+
+      if (response.status === 401 || response.status === 403) {
+        setIsAdmin(false);
+        setAdminUsers([]);
+        setAdminError(
+          response.status === 403
+            ? "This Google account is not configured as the WaterWatch administrator."
+            : "Your login session has expired. Please sign in again."
+        );
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(`Could not load login history (${response.status}).`);
+      }
+
+      const records = await response.json();
+      setAdminUsers(getArray(records));
+      setIsAdmin(true);
+    } catch (err) {
+      setAdminError(err.message || "Could not load login history.");
+      setAdminUsers([]);
+      setIsAdmin(false);
+    } finally {
+      setAdminLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isLoggedIn) {
+      loadAdminUsers();
+    }
+  }, [isLoggedIn, loadAdminUsers]);
+
   const handleSignOut = async () => {
     try {
       await fetch(`${BACKEND_URL}/logout`, {
@@ -174,6 +222,9 @@ function App() {
     localStorage.removeItem("waterwatch-login");
     setIsLoggedIn(false);
     setUser(null);
+    setIsAdmin(false);
+    setAdminUsers([]);
+    setAdminError("");
     setDevices([]);
     setReadings([]);
     setAlerts([]);
@@ -418,6 +469,12 @@ function App() {
     }
   };
 
+  useEffect(() => {
+    if (activeTab === "Login History" && isAdmin) {
+      loadAdminUsers();
+    }
+  }, [activeTab, isAdmin, loadAdminUsers]);
+
   const dailyUsage =
     summary.dailyUsageLitres ??
     summary.dailyUsageLiters ??
@@ -503,6 +560,7 @@ function App() {
     { label: "Devices", icon: Waves },
     { label: "Consumption", icon: Activity },
     { label: "Alerts", icon: Bell },
+    ...(isAdmin ? [{ label: "Login History", icon: ShieldCheck }] : []),
   ];
 
   const pageTitle =
@@ -512,7 +570,9 @@ function App() {
         ? "Consumption analysis"
         : activeTab === "Devices"
           ? "Connected instruments"
-          : "Monitoring alerts";
+          : activeTab === "Login History"
+            ? "User login history"
+            : "Monitoring alerts";
 
   return (
     <div className={`app-shell ${theme}`} data-theme={theme}>
@@ -1061,6 +1121,81 @@ function App() {
               Alerts are generated from configured monitoring rules. A
               high-flow alert is not proof of a physical leak.
             </p>
+          </section>
+        )}
+
+        {!loading && activeTab === "Login History" && isAdmin && (
+          <section className="panel page-panel">
+            <div className="panel-heading">
+              <div>
+                <span className="section-index">01 / ADMINISTRATION</span>
+                <h2>Registered login accounts</h2>
+                <p>Google accounts recorded after the login-tracking feature was deployed.</p>
+              </div>
+              <button
+                className="secondary-button"
+                onClick={loadAdminUsers}
+                disabled={adminLoading}
+              >
+                <RefreshCw size={16} className={adminLoading ? "spin" : ""} />
+                {adminLoading ? "Refreshing..." : "Refresh list"}
+              </button>
+            </div>
+
+            {adminError && (
+              <div className="message-banner error-banner" role="alert">
+                <AlertTriangle size={18} />
+                <span>{adminError}</span>
+              </div>
+            )}
+
+            <div className="device-summary">
+              <div>
+                <span className="summary-label">REGISTERED USERS</span>
+                <strong>{adminUsers.length.toString().padStart(2, "0")}</strong>
+              </div>
+              <div>
+                <span className="summary-label">TRACKING STATUS</span>
+                <strong>{isAdmin ? "Active" : "Unavailable"}</strong>
+              </div>
+            </div>
+
+            {adminLoading && adminUsers.length === 0 ? (
+              <div className="empty-state">
+                <RefreshCw size={22} className="spin" />
+                <strong>Loading login history...</strong>
+              </div>
+            ) : adminUsers.length === 0 ? (
+              <div className="empty-state">
+                <ShieldCheck size={25} />
+                <strong>No login records yet</strong>
+                <span>Records are added when users sign in after login tracking is deployed.</span>
+              </div>
+            ) : (
+              <div className="alert-list">
+                {adminUsers.map((record) => (
+                  <div className="alert-row" key={record.id}>
+                    <div className="alert-icon">
+                      <ShieldCheck size={18} />
+                    </div>
+                    <div className="alert-main">
+                      <strong>{record.name || "Name unavailable"}</strong>
+                      <span>{record.email || "Email unavailable"}</span>
+                      <span>
+                        First login: {record.firstLoginAt
+                          ? new Date(record.firstLoginAt).toLocaleString()
+                          : "Unavailable"}
+                      </span>
+                      <span>
+                        Last login: {record.lastLoginAt
+                          ? new Date(record.lastLoginAt).toLocaleString()
+                          : "Unavailable"}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
         )}
 
