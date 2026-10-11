@@ -29,7 +29,11 @@ import CursorWaves from "./CursorWaves";
 import LoginPage from "./LoginPage";
 import "./App.css";
 
-const API_URL = `${import.meta.env.VITE_API_URL || "http://localhost:8080"}/api`;
+const BACKEND_URL = (
+  import.meta.env.VITE_API_URL || "http://localhost:8080"
+).replace(/\/$/, "");
+
+const API_URL = `${BACKEND_URL}/api`;
 
 const getArray = (value) => {
   if (Array.isArray(value)) return value;
@@ -41,7 +45,9 @@ const getArray = (value) => {
 const formatNumber = (value, digits = 1) => {
   const number = Number(value);
   return Number.isFinite(number)
-    ? number.toLocaleString(undefined, { maximumFractionDigits: digits })
+    ? number.toLocaleString(undefined, {
+        maximumFractionDigits: digits,
+      })
     : "—";
 };
 
@@ -82,17 +88,12 @@ function App() {
   const [modalOpen, setModalOpen] = useState(false);
   const [deviceName, setDeviceName] = useState("");
   const [deviceLocation, setDeviceLocation] = useState("");
-  const [isLoggedIn, setIsLoggedIn] = useState(() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get("login") === "success" || localStorage.getItem("waterwatch-login") === "true";
-  });
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
+  const [user, setUser] = useState(null);
 
   const handleGoogleLogin = () => {
-    const backendUrl = (
-      import.meta.env.VITE_API_URL || "http://localhost:8080"
-    ).replace(/\/$/, "");
-
-    window.location.href = `${backendUrl}/oauth2/authorization/google`;
+    window.location.href = `${BACKEND_URL}/oauth2/authorization/google`;
   };
 
   const activeAlerts = alerts.filter(
@@ -103,28 +104,82 @@ function App() {
     localStorage.setItem("waterwatch-theme", theme);
   }, [theme]);
 
+  // Verify the real backend session when the application opens.
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("login") === "success") {
-      localStorage.setItem("waterwatch-login", "true");
-      setIsLoggedIn(true);
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
+    let cancelled = false;
+
+    const checkSession = async () => {
+      try {
+        const response = await fetch(`${API_URL}/auth/me`, {
+          method: "GET",
+          credentials: "include",
+        });
+
+        if (!response.ok) {
+          if (!cancelled) {
+            setIsLoggedIn(false);
+            setUser(null);
+            localStorage.removeItem("waterwatch-login");
+          }
+          return;
+        }
+
+        const profile = await response.json();
+
+        if (!cancelled) {
+          setUser(profile);
+          setIsLoggedIn(true);
+          localStorage.setItem("waterwatch-login", "true");
+
+          if (window.location.search || window.location.hash) {
+            window.history.replaceState(
+              {},
+              document.title,
+              window.location.pathname
+            );
+          }
+        }
+      } catch (err) {
+        console.error("Could not verify login session:", err);
+
+        if (!cancelled) {
+          setIsLoggedIn(false);
+          setUser(null);
+          localStorage.removeItem("waterwatch-login");
+        }
+      } finally {
+        if (!cancelled) {
+          setCheckingSession(false);
+        }
+      }
+    };
+
+    checkSession();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleSignOut = async () => {
-    const backendUrl = (import.meta.env.VITE_API_URL || "http://localhost:8080").replace(/\/$/, "");
     try {
-      await fetch(`${backendUrl}/logout`, { method: "POST", credentials: "include" });
+      await fetch(`${BACKEND_URL}/logout`, {
+        method: "POST",
+        credentials: "include",
+      });
     } catch (err) {
       console.warn("Sign-out request could not reach the backend:", err);
     }
+
     localStorage.removeItem("waterwatch-login");
     setIsLoggedIn(false);
+    setUser(null);
     setDevices([]);
     setReadings([]);
     setAlerts([]);
     setSummary({});
+    setError("");
+    setNotice("");
   };
 
   const loadDashboard = useCallback(async (showRefresh = false) => {
@@ -140,10 +195,16 @@ function App() {
 
       const responses = await Promise.all(
         endpoints.map(async (url) => {
-          const response = await fetch(url);
+          const response = await fetch(url, {
+            credentials: "include",
+          });
+
           if (!response.ok) {
-            throw new Error(`Request failed (${response.status}): ${url}`);
+            throw new Error(
+              `Request failed (${response.status}): ${url}`
+            );
           }
+
           return response.json();
         })
       );
@@ -160,7 +221,7 @@ function App() {
     } catch (err) {
       console.error("WaterWatch loading error:", err);
       setError(
-        "Could not load dashboard data. Make sure the Spring Boot backend is running on port 8080."
+        "Could not load dashboard data. Check the backend connection and API endpoints."
       );
     } finally {
       setLoading(false);
@@ -169,14 +230,19 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (checkingSession) return undefined;
+
     if (!isLoggedIn) {
       setLoading(false);
       return undefined;
     }
+
     loadDashboard();
+
     const interval = setInterval(() => loadDashboard(), 10000);
+
     return () => clearInterval(interval);
-  }, [isLoggedIn, loadDashboard]);
+  }, [checkingSession, isLoggedIn, loadDashboard]);
 
   const handleSimulateReadings = async (simulateLeak = false) => {
     if (devices.length === 0) {
@@ -201,11 +267,16 @@ function App() {
         `${API_URL}/readings/simulate?deviceId=${encodeURIComponent(device.id)}` +
         `&count=40&simulateLeak=${simulateLeak}`;
 
-      const response = await fetch(url, { method: "POST" });
+      const response = await fetch(url, {
+        method: "POST",
+        credentials: "include",
+      });
 
       if (!response.ok) {
         const body = await response.text();
-        throw new Error(body || `Simulation failed (${response.status}).`);
+        throw new Error(
+          body || `Simulation failed (${response.status}).`
+        );
       }
 
       await loadDashboard();
@@ -237,7 +308,10 @@ function App() {
     try {
       const response = await fetch(`${API_URL}/devices`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           deviceName: deviceName.trim(),
           location: deviceLocation.trim(),
@@ -247,7 +321,9 @@ function App() {
 
       if (!response.ok) {
         const body = await response.text();
-        throw new Error(body || `Registration failed (${response.status}).`);
+        throw new Error(
+          body || `Registration failed (${response.status}).`
+        );
       }
 
       setDeviceName("");
@@ -270,7 +346,10 @@ function App() {
     try {
       const response = await fetch(
         `${API_URL}/alerts/${alertId}/resolve`,
-        { method: "PATCH" }
+        {
+          method: "PATCH",
+          credentials: "include",
+        }
       );
 
       if (!response.ok) {
@@ -312,6 +391,7 @@ function App() {
     try {
       const response = await fetch(`${API_URL}/alerts/resolve-all`, {
         method: "PATCH",
+        credentials: "include",
       });
 
       if (!response.ok) {
@@ -322,9 +402,11 @@ function App() {
       }
 
       const result = await response.json();
+
       setNotice(
         `${result.resolvedCount ?? unresolved.length} alerts resolved successfully.`
       );
+
       await loadDashboard();
     } catch (err) {
       setError(
@@ -395,10 +477,22 @@ function App() {
   )[0];
 
   const lastUpdated = getReadingTime(lastReading);
+
   const formattedLastUpdated =
     lastUpdated && !Number.isNaN(new Date(lastUpdated).getTime())
       ? new Date(lastUpdated).toLocaleString()
       : "Waiting for readings";
+
+  if (checkingSession) {
+    return (
+      <div className={`app-shell ${theme}`} data-theme={theme}>
+        <div className="panel empty-state">
+          <RefreshCw size={22} className="spin" />
+          <strong>Checking your login...</strong>
+        </div>
+      </div>
+    );
+  }
 
   if (!isLoggedIn) {
     return <LoginPage onGoogleLogin={handleGoogleLogin} />;
@@ -456,10 +550,24 @@ function App() {
         </nav>
 
         <div className="topbar-actions">
-          <span className="system-status">
-            <span className="status-dot" />
-            LOCAL SYSTEM
-          </span>
+          {user?.picture && (
+            <img
+              src={user.picture}
+              alt="Google profile"
+              referrerPolicy="no-referrer"
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: "50%",
+                objectFit: "cover",
+              }}
+            />
+          )}
+
+          {user?.name && (
+            <span className="system-status">{user.name}</span>
+          )}
+
           <button
             className="secondary-button google-login-button"
             onClick={handleSignOut}
@@ -468,6 +576,7 @@ function App() {
           >
             Sign out
           </button>
+
           <button
             className="icon-button"
             title="Refresh dashboard"
@@ -479,6 +588,7 @@ function App() {
               className={refreshing ? "spin" : ""}
             />
           </button>
+
           <button
             className="icon-button"
             title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
@@ -499,7 +609,9 @@ function App() {
               <span className="eyebrow-separator">/</span>
               <span>DEMO ENVIRONMENT</span>
             </div>
+
             <h1>{pageTitle}</h1>
+
             <p className="page-description">
               Track flow, understand usage, and test water monitoring scenarios.
             </p>
@@ -626,11 +738,13 @@ function App() {
                             />
                           </linearGradient>
                         </defs>
+
                         <CartesianGrid
                           strokeDasharray="3 5"
                           stroke="var(--chart-grid)"
                           vertical={false}
                         />
+
                         <XAxis
                           dataKey="name"
                           tick={{ fill: "var(--muted)", fontSize: 11 }}
@@ -638,11 +752,13 @@ function App() {
                           tickLine={false}
                           minTickGap={30}
                         />
+
                         <YAxis
                           tick={{ fill: "var(--muted)", fontSize: 11 }}
                           axisLine={false}
                           tickLine={false}
                         />
+
                         <Tooltip
                           contentStyle={{
                             background: "var(--panel)",
@@ -651,6 +767,7 @@ function App() {
                             color: "var(--text)",
                           }}
                         />
+
                         <Area
                           type="monotone"
                           dataKey="flow"
@@ -660,6 +777,7 @@ function App() {
                           fill="url(#consumptionGradient)"
                           isAnimationActive={false}
                         />
+
                         <Area
                           type="monotone"
                           dataKey="volume"
@@ -903,7 +1021,9 @@ function App() {
                 <span className="section-index">01 / EVENT MONITORING</span>
                 <h2>All monitoring alerts</h2>
                 <p>
-                  {activeAlerts.length} active · {alerts.length - activeAlerts.length} resolved · {alerts.length} total
+                  {activeAlerts.length} active ·{" "}
+                  {alerts.length - activeAlerts.length} resolved ·{" "}
+                  {alerts.length} total
                 </p>
               </div>
 
@@ -916,7 +1036,9 @@ function App() {
                   }
                 >
                   <Check size={17} />
-                  {busyAction === "resolve-all" ? "Resolving..." : "Resolve All"}
+                  {busyAction === "resolve-all"
+                    ? "Resolving..."
+                    : "Resolve All"}
                 </button>
                 <button
                   className="secondary-button"
@@ -993,7 +1115,9 @@ function App() {
               <input
                 id="device-location"
                 value={deviceLocation}
-                onChange={(event) => setDeviceLocation(event.target.value)}
+                onChange={(event) =>
+                  setDeviceLocation(event.target.value)
+                }
                 placeholder="e.g. Kitchen"
                 required
               />
@@ -1104,21 +1228,31 @@ function AlertList({
           alert.timestamp ||
           alert.createdAt ||
           alert.time;
+
         const date = time ? new Date(time) : null;
         const validDate = date && !Number.isNaN(date.getTime());
+
         const message =
           alert.message ||
           alert.description ||
           alert.reason ||
           alert.alertType ||
           "Potential high-flow event";
+
         const resolved = alert.status === "RESOLVED";
         const resolving = busyAction === `resolve-${alert.id}`;
 
         return (
-          <div className="alert-row" key={alert.id ?? `${message}-${index}`}>
+          <div
+            className="alert-row"
+            key={alert.id ?? `${message}-${index}`}
+          >
             <div className="alert-icon">
-              {resolved ? <Check size={18} /> : <AlertTriangle size={18} />}
+              {resolved ? (
+                <Check size={18} />
+              ) : (
+                <AlertTriangle size={18} />
+              )}
             </div>
 
             <div className="alert-main">
