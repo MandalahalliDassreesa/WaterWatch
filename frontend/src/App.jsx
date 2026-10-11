@@ -82,6 +82,14 @@ function App() {
   const [deviceName, setDeviceName] = useState("");
   const [deviceLocation, setDeviceLocation] = useState("");
 
+  const handleGoogleLogin = () => {
+    const backendUrl = (
+      import.meta.env.VITE_API_URL || "http://localhost:8080"
+    ).replace(/\/$/, "");
+
+    window.location.href = `${backendUrl}/oauth2/authorization/google`;
+  };
+
   const activeAlerts = alerts.filter(
     (alert) => alert.status !== "RESOLVED"
   );
@@ -416,6 +424,14 @@ function App() {
             LOCAL SYSTEM
           </span>
           <button
+            className="secondary-button google-login-button"
+            onClick={handleGoogleLogin}
+            type="button"
+          >
+            <span className="google-letter" aria-hidden="true">G</span>
+            Continue with Google
+          </button>
+          <button
             className="icon-button"
             title="Refresh dashboard"
             onClick={() => loadDashboard(true)}
@@ -563,12 +579,12 @@ function App() {
                           >
                             <stop
                               offset="0%"
-                              stopColor="#50C878"
+                              stopColor="#168BCE"
                               stopOpacity={0.28}
                             />
                             <stop
                               offset="100%"
-                              stopColor="#50C878"
+                              stopColor="#168BCE"
                               stopOpacity={0.01}
                             />
                           </linearGradient>
@@ -602,7 +618,7 @@ function App() {
                           type="monotone"
                           dataKey="flow"
                           name="Flow (L/min)"
-                          stroke="#50C878"
+                          stroke="#168BCE"
                           strokeWidth={2}
                           fill="url(#consumptionGradient)"
                           isAnimationActive={false}
@@ -825,8 +841,8 @@ function App() {
                         type="monotone"
                         dataKey="flow"
                         name="Flow (L/min)"
-                        stroke="#50C878"
-                        fill="#50C878"
+                        stroke="#168BCE"
+                        fill="#168BCE"
                         fillOpacity={0.15}
                       />
                     </AreaChart>

@@ -51,7 +51,7 @@ input:focus-visible {
   --input-bg: #0c141d;
   --hover: #1b2b3b;
   --success-bg: #102a3b;
-  --error-bg: #2a171b;
+  --error-bg: #2a1715;
 
   min-height: 100vh;
   background: var(--bg);
@@ -62,10 +62,10 @@ input:focus-visible {
 }
 
 .app-shell.light {
-  --bg: #f4faff;
+  --bg: #ffffff;
   --panel: #ffffff;
   --panel-alt: #eaf5fc;
-  --text: #183247;
+  --text: #1f2937;
   --muted: #617b90;
   --border: #d5e6f2;
   --accent: #168BCE;
@@ -341,7 +341,7 @@ input:focus-visible {
 .success-banner {
   background: var(--success-bg);
   color: var(--accent);
-  border-color: #246b91;
+  border-color: #245f82;
 }
 
 .banner-close {
@@ -372,7 +372,7 @@ input:focus-visible {
 }
 
 .metric-card:hover {
-  border-color: #246b91;
+  border-color: #376f94;
   transform: translateY(-2px);
 }
 
@@ -595,7 +595,7 @@ input:focus-visible {
 .primary-button {
   color: #fff;
   background: var(--primary);
-  border-color: #12669a;
+  border-color: #176da5;
 }
 
 .primary-button:hover:not(:disabled) {
@@ -1213,5 +1213,36 @@ input:focus-visible {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+
+/* Google sign-in button */
+.google-login-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  white-space: nowrap;
+}
+
+.google-letter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #4285f4;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+@media (max-width: 700px) {
+  .google-login-button {
+    font-size: 11px;
+    padding: 8px;
   }
 }
