@@ -26,6 +26,7 @@ import {
   YAxis,
 } from "recharts";
 import CursorWaves from "./CursorWaves";
+import LoginPage from "./LoginPage";
 import "./App.css";
 
 const API_URL = `${import.meta.env.VITE_API_URL || "http://localhost:8080"}/api`;
@@ -81,6 +82,10 @@ function App() {
   const [modalOpen, setModalOpen] = useState(false);
   const [deviceName, setDeviceName] = useState("");
   const [deviceLocation, setDeviceLocation] = useState("");
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("login") === "success" || localStorage.getItem("waterwatch-login") === "true";
+  });
 
   const handleGoogleLogin = () => {
     const backendUrl = (
@@ -97,6 +102,30 @@ function App() {
   useEffect(() => {
     localStorage.setItem("waterwatch-theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("login") === "success") {
+      localStorage.setItem("waterwatch-login", "true");
+      setIsLoggedIn(true);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
+  const handleSignOut = async () => {
+    const backendUrl = (import.meta.env.VITE_API_URL || "http://localhost:8080").replace(/\/$/, "");
+    try {
+      await fetch(`${backendUrl}/logout`, { method: "POST", credentials: "include" });
+    } catch (err) {
+      console.warn("Sign-out request could not reach the backend:", err);
+    }
+    localStorage.removeItem("waterwatch-login");
+    setIsLoggedIn(false);
+    setDevices([]);
+    setReadings([]);
+    setAlerts([]);
+    setSummary({});
+  };
 
   const loadDashboard = useCallback(async (showRefresh = false) => {
     if (showRefresh) setRefreshing(true);
@@ -140,10 +169,14 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (!isLoggedIn) {
+      setLoading(false);
+      return undefined;
+    }
     loadDashboard();
     const interval = setInterval(() => loadDashboard(), 10000);
     return () => clearInterval(interval);
-  }, [loadDashboard]);
+  }, [isLoggedIn, loadDashboard]);
 
   const handleSimulateReadings = async (simulateLeak = false) => {
     if (devices.length === 0) {
@@ -367,6 +400,10 @@ function App() {
       ? new Date(lastUpdated).toLocaleString()
       : "Waiting for readings";
 
+  if (!isLoggedIn) {
+    return <LoginPage onGoogleLogin={handleGoogleLogin} />;
+  }
+
   const navItems = [
     { label: "Overview", icon: LayoutDashboard },
     { label: "Devices", icon: Waves },
@@ -425,11 +462,11 @@ function App() {
           </span>
           <button
             className="secondary-button google-login-button"
-            onClick={handleGoogleLogin}
+            onClick={handleSignOut}
             type="button"
+            title="Sign out of WaterWatch"
           >
-            <span className="google-letter" aria-hidden="true">G</span>
-            Continue with Google
+            Sign out
           </button>
           <button
             className="icon-button"
